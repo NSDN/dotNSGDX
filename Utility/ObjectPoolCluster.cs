@@ -6,172 +6,355 @@ namespace dotNSGDX.Utility
 {
     public class ObjectPoolCluster
     {
-        public delegate void Work(LinkedList<IObject> objectPool);
-
-        public class ObjectPool
+        protected class ObjectPool
         {
-            protected LinkedList<IObject> objectPool;
-            protected TimerCallback callback;
-            protected Timer timer;
-            protected Work work;
+            public struct PoolInfo
+            {
+                public int interval;
+            }
 
-            public int PoolSize { get; protected set; }
+            private static int _counter = 0;
+            public static int Counter
+            {
+                get
+                {
+                    try
+                    {
+                        Monitor.Enter(_counter);
+                        return _counter;
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_counter);
+                    }
+                }
+                set
+                {
+                    Monitor.Enter(_counter);
+                    _counter = value;
+                    Monitor.Exit(_counter);
+                }
+            }
+            protected int nowCounter;
+
+            protected LinkedList<IObject> objectPool;
+            protected LinkedList<IObject> cachePool;
+            protected WaitCallback waitCallback;
+
+            private bool _running;
+            public bool IsRunning
+            {
+                get
+                {
+                    try
+                    {
+                        Monitor.Enter(this);
+                        return _running;
+                    }
+                    finally
+                    {
+                        Monitor.Exit(this);
+                    }
+                }
+                set
+                {
+                    Monitor.Enter(this);
+                    _running = value;
+                    Monitor.Exit(this);
+                }
+            }
+
+            public bool Finished
+            {
+                get
+                {
+                    try
+                    {
+                        Monitor.Enter(this);
+                        return (nowCounter == Counter);
+                    }
+                    finally
+                    {
+                        Monitor.Exit(this);
+                    }
+                }
+            }
+
+            public ObjectPool()
+            {
+                nowCounter = -1;
+                objectPool = new LinkedList<IObject>();
+                cachePool = new LinkedList<IObject>();
+                
+                this.waitCallback = (state) =>
+                {
+                    while (IsRunning)
+                    {
+                        int interval = 10;
+                        if (state is PoolInfo)
+                            interval = ((PoolInfo)state).interval;
+
+                        if (nowCounter != Counter)
+                        {
+                            Monitor.Enter(this);
+
+                            int time = Environment.TickCount;
+                            cachePool.Clear();
+                            foreach (IObject obj in objectPool)
+                                cachePool.AddLast(obj);
+                            foreach (IObject obj in cachePool)
+                                if (obj.OnUpdate(nowCounter) == Result.END)
+                                    objectPool.Remove(obj);
+                            time = Environment.TickCount - time;
+
+                            Monitor.Exit(this);
+
+                            nowCounter = Counter;
+
+                            Thread.Sleep(Math.Abs(interval - time));
+                        }
+                        else Thread.Sleep(interval);
+                    }
+                };
+
+                IsRunning = true;
+            }
+
+            public WaitCallback Callback
+            {
+                get
+                {
+                    return waitCallback;
+                }
+            }
+
+            public void Dispose()
+            {
+                objectPool.Clear();
+                cachePool.Clear();
+                objectPool = null;
+                cachePool = null;
+            }
+
+            public void Render(RenderUtil.IRenderer renderer)
+            {
+                Monitor.Enter(this);
+
+                renderer.Begin();
+                foreach (IObject obj in objectPool)
+                    obj.OnRender(renderer);
+                renderer.End();
+
+                Monitor.Exit(this);
+            }
+
+            public void Add(IObject obj)
+            {
+                Monitor.Enter(this);
+                objectPool.AddLast(obj);
+                Monitor.Exit(this);
+            }
+
+            public void Add(IObject[] objs)
+            {
+                Monitor.Enter(this);
+                foreach (IObject obj in objs)
+                    objectPool.AddLast(obj);
+                Monitor.Exit(this);
+            }
+
+            public void Clear()
+            {
+                Monitor.Enter(this);
+                objectPool.Clear();
+                Monitor.Exit(this);
+            }
+
             public int Count
             {
                 get
                 {
-                    return objectPool.Count;
+                    try
+                    {
+                        Monitor.Enter(this);
+                        return objectPool.Count;
+                    }
+                    finally
+                    {
+                        Monitor.Exit(this);
+                    }
                 }
             }
 
-            public LinkedList<IObject> Pool
+            public void RemoveLast()
+            {
+                Monitor.Enter(this);
+                objectPool.RemoveLast();
+                Monitor.Exit(this);
+            }
+
+            public IObject GetLast()
+            {
+                try
+                {
+                    Monitor.Enter(this);
+                    return objectPool.Last.Value;
+                }
+                finally
+                {
+                    Monitor.Exit(this);
+                }
+            }
+
+            public IEnumerable<IObject> Array
             {
                 get
                 {
                     return objectPool;
                 }
             }
-
-            public ObjectPool(int poolSize) : this(poolSize, (obj) => { })
-            {
-
-            }
-
-            public ObjectPool(int poolSize, Work work)
-            {
-                PoolSize = poolSize;
-                callback = (obj) =>
-                {
-                    if (!(obj is LinkedList<IObject>)) return;
-                    this.work.Invoke((LinkedList<IObject>)obj);
-                };
-                this.work = work;
-
-                objectPool = new LinkedList<IObject>();
-                timer = new Timer(callback, objectPool, 1000, 10);
-            }
-
-            public void Dispose()
-            {
-                timer.Dispose();
-            }
-
-            public void SetWork(Work work)
-            {
-                this.work = work;
-            }  
-
-            public void Clear()
-            {
-                objectPool.Clear();
-            }
-
         }
 
-        protected List<ObjectPool> poolCluster;
-        protected Work work;
-
+        protected LinkedList<ObjectPool> poolCluster;
         public int PoolSize { get; protected set; }
-
         public int Capacity { get; protected set; }
-        public int Count
-        {
-            get
-            {
-                return poolCluster.Count;
-            }
-        }
-        public ObjectPool this[int index]
-        {
-            get
-            {
-                return poolCluster[index];
-            }
-        }
 
-        protected ObjectPool FirstPool
+        public int TickTime { get; protected set; }
+        public bool Finished
         {
             get
             {
-                return poolCluster[0];
-            }
-        }
-        protected ObjectPool LastPool
-        {
-            get
-            {
-                return poolCluster[Count - 1];
+                bool state = true;
+                foreach (ObjectPool i in poolCluster)
+                    state &= i.Finished;
+                return state;
             }
         }
 
         public ObjectPoolCluster(int poolSize, int capacity)
         {
+            poolCluster = new LinkedList<ObjectPool>();
             PoolSize = poolSize;
             Capacity = capacity;
-
-            poolCluster = new List<ObjectPool>();
-
-            work = (obj) => { };
-            poolCluster.Add(new ObjectPool(PoolSize, work));
+            
+            ThreadPool.SetMaxThreads(capacity, capacity);
+            AddPool();
         }
 
-        public List<ObjectPool> Cluster()
+        public override string ToString()
         {
-            return poolCluster;
-        }
+            string str = "";
 
-        public void Dispose()
-        {
-            foreach (ObjectPool pool in poolCluster)
-                pool.Dispose();
-        }
+            int worker = 0, io = 0;
+            ThreadPool.GetAvailableThreads(out worker, out io);
 
-        public void SetWork(Work work)
-        {
-            this.work = work;
-        }
-
-        public void Balance()
-        {
-            if (LastPool.Count > PoolSize)
+            str += ("poolCluster info {\n");
+            str += ("    ");
+            str += ("pool count: ");
+            str += (poolCluster.Count);
+            str += ("\n");
+            str += ("    ");
+            str += ("worker threads: ");
+            str += (worker);
+            str += ("\n");
+            str += ("    ");
+            str += ("async I/O threads: ");
+            str += (io);
+            str += ("\n");
+            str += ("    ");
+            str += ("obj count: ");
+            foreach (ObjectPool i in poolCluster)
             {
-                if (FirstPool.Count > PoolSize && poolCluster.Count < Capacity)
-                {
-                    poolCluster.Add(new ObjectPool(PoolSize));
-                }
-                else if (FirstPool.Count == 0)
-                {
-                    FirstPool.Dispose();
-                    poolCluster.Remove(FirstPool);
-                }
-                else
-                {
-                    for (int i = 1; i < poolCluster.Count; i++)
-                    {
-                        int countPerPool = poolCluster[i].Count / poolCluster.Count;
-                        for (int c = 1; c < countPerPool; c++)
-                        {
-                            FirstPool.Pool.AddLast(poolCluster[i].Pool.Last);
-                            poolCluster[i].Pool.RemoveLast();
-                        }
-                    }
-                    poolCluster[0].Pool.AddLast(poolCluster[poolCluster.Count - 1].Pool.Last);
-                    poolCluster[poolCluster.Count - 1].Pool.RemoveLast();
-                }
+                str += (i.Count);
+                str += ("    ");
             }
-            poolCluster.Sort((a, b) => a.Count - b.Count);
+            str += ("\n");
+            str += ("    ");
+            str += ("obj sum: ");
+            int sum = 0;
+            foreach (ObjectPool i in poolCluster) sum += i.Count;
+            str += (sum);
+            str += ("\n}");
+
+            return str;
+        }
+
+        private void AddPool()
+        {
+            ObjectPool pool = new ObjectPool();
+            poolCluster.AddLast(pool);
+            ThreadPool.QueueUserWorkItem(
+                pool.Callback, new ObjectPool.PoolInfo() { interval = 10 }
+            );
+        }
+
+        private void RemovePool(ObjectPool pool)
+        {
+            if (!poolCluster.Contains(pool)) return;
+            pool.IsRunning = false;
+            poolCluster.Remove(pool);
+            pool.Dispose();
+        }
+
+        protected ObjectPool First
+        {
+            get
+            {
+                return poolCluster.First.Value;
+            }
+        }
+        protected ObjectPool Last
+        {
+            get
+            {
+                return poolCluster.Last.Value;
+            }
         }
 
         public void Add(IObject obj)
         {
-            poolCluster[0].Pool.AddLast(obj);
+            First.Add(obj);
         }
 
         public void Add(IObject[] objs)
         {
-            foreach (IObject obj in objs)
+            First.Add(objs);
+        }
+
+        public void Balance()
+        {
+            if (First.Count > PoolSize && poolCluster.Count < Capacity)
             {
-                poolCluster[0].Pool.AddLast(obj);
+                AddPool();
+            }
+            else if (First.Count == 0 && poolCluster.Count > 1)
+            {
+                First.Clear();
+                RemovePool(First);
+            }
+            else
+            {
+                int size = (Last.Count - First.Count) / 2;
+                for (int i = 0; i < size; i++)
+                {
+                    First.Add(Last.GetLast());
+                    Last.RemoveLast();
+                }
+            }
+            DoSort();
+        }
+
+        protected void DoSort()
+        {
+            ObjectPool[] objects = new ObjectPool[poolCluster.Count];
+            poolCluster.CopyTo(objects, 0);
+            Array.Sort(objects, (a, b) => a.Count - b.Count);
+
+            var it = poolCluster.First;
+            foreach (ObjectPool e in objects)
+            {
+                it.Value = e;
+                it = it.Next;
             }
         }
 
@@ -181,12 +364,44 @@ namespace dotNSGDX.Utility
                 pool.Clear();
         }
 
+        public void Dispose()
+        {
+            Clear();
+            foreach (ObjectPool pool in poolCluster)
+            {
+                pool.IsRunning = false;
+                pool.Dispose();
+            }
+        }
+
+        public void SetTick(int tick)
+        {
+            ObjectPool.Counter = tick;
+        }
+
+        public void Tick()
+        {
+            if (Finished)
+            {
+                SetTick(TickTime);
+                if (TickTime % 60 == 0)
+                    Balance();
+                TickTime += 1;
+            }
+        }
+
+        public void Render(RenderUtil.IRenderer renderer)
+        {
+            foreach (ObjectPool i in poolCluster)
+                i.Render(renderer);
+        }
+
         public IObject[] ToArray()
         {
             List<IObject> list = new List<IObject>();
             foreach (ObjectPool pool in poolCluster)
             {
-                list.AddRange(pool.Pool);
+                list.AddRange(pool.Array);
             }
             return list.ToArray();
         }

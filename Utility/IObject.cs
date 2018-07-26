@@ -7,6 +7,6 @@ namespace dotNSGDX.Utility
     public interface IObject
     {
         Result OnUpdate(int t);
-        Result OnRender(IRenderer renderer);
+        Result OnRender(RenderUtil.IRenderer renderer);
     }
 }

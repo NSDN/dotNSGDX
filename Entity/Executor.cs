@@ -1,14 +1,16 @@
 ﻿using System;
 
+using dotNSGDX.Utility;
+
 namespace dotNSGDX.Entity
 {
-    public abstract class Executor : Utility.IObject
+    public abstract class Executor : IObject
     {
-        public abstract Utility.Result OnUpdate(int t);
+        public abstract Result OnUpdate(int t);
 
-        public Utility.Result OnRender(Utility.IRenderer renderer)
+        public Result OnRender(RenderUtil.IRenderer renderer)
         {
-            return Utility.Result.DONE;
+            return Result.DONE;
         }
     }
 }
