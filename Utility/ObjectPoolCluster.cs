@@ -13,6 +13,7 @@ namespace dotNSGDX.Utility
                 public int interval;
             }
 
+            private static readonly object _lock = new object();
             private static int _counter = 0;
             public static int Counter
             {
@@ -20,19 +21,19 @@ namespace dotNSGDX.Utility
                 {
                     try
                     {
-                        Monitor.Enter(_counter);
+                        Monitor.Enter(_lock);
                         return _counter;
                     }
                     finally
                     {
-                        Monitor.Exit(_counter);
+                        Monitor.Exit(_lock);
                     }
                 }
                 set
                 {
-                    Monitor.Enter(_counter);
+                    Monitor.Enter(_lock);
                     _counter = value;
-                    Monitor.Exit(_counter);
+                    Monitor.Exit(_lock);
                 }
             }
             protected int nowCounter;
