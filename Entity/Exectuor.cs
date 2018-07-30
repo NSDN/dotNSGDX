@@ -4,7 +4,7 @@ using dotNSGDX.Utility;
 
 namespace dotNSGDX.Entity
 {
-    public abstract class Executor : IObject
+    public abstract class Exectuor : IObject
     {
         public abstract Result OnUpdate(int t);
 

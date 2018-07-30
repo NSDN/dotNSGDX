@@ -48,10 +48,16 @@ namespace dotNSGDX.Utility
                     a = values.Item4
                 };
             }
+
+            public uint ToRGB()
+            {
+                return (uint)(r * 255) << 16 | (uint)(g * 255) << 8 | (uint)(b * 255);
+            }
         }
 
         public interface IDrawable
         {
+            object GetRes();
         }
 
         public interface IRenderer

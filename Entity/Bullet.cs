@@ -6,7 +6,7 @@ using static dotNSGDX.Utility.RenderUtil;
 
 namespace dotNSGDX.Entity
 {
-    public class Bullet
+    public class Bullet : IObject
     {
         protected Vec2 pos;
         protected Vec2 vel;
@@ -76,7 +76,7 @@ namespace dotNSGDX.Entity
 
         public Bullet Color(Color4 color) { this.color = new Color4(color); return this; }
 
-        public Result OnUpdate(int t)
+        public virtual Result OnUpdate(int t)
         {
             vel += acc;
             pos += vel;
@@ -87,7 +87,7 @@ namespace dotNSGDX.Entity
         public Result OnRender(IRenderer renderer)
         {
             foreach (IDrawable d in drawables)
-                renderer.Draw(d, (float)pos.X, (float)pos.X, (float)dir.A, scale, color);
+                renderer.Draw(d, (float)pos.X, (float)pos.Y, (float)dir.A, scale, color);
             return Result.DONE;
         }
     }

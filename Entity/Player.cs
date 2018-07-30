@@ -5,7 +5,7 @@ using static dotNSGDX.Utility.RenderUtil;
 
 namespace dotNSGDX.Entity
 {
-    public class Player
+    public class Player : IObject
     {
         protected Vec2 pos;
         protected Vec2 dir;
@@ -38,7 +38,7 @@ namespace dotNSGDX.Entity
 
         public void Look(Vec2 vec) => eye = new Vec2(vec);
 
-        public Result OnUpdate(int t)
+        public virtual Result OnUpdate(int t)
         {
             dir = pos - eye;
             return Result.DONE;

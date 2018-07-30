@@ -141,10 +141,8 @@ namespace dotNSGDX.Utility
             {
                 Monitor.Enter(this);
 
-                renderer.Begin();
                 foreach (IObject obj in objectPool)
                     obj.OnRender(renderer);
-                renderer.End();
 
                 Monitor.Exit(this);
             }
@@ -393,8 +391,10 @@ namespace dotNSGDX.Utility
 
         public void Render(RenderUtil.IRenderer renderer)
         {
+            renderer.Begin();
             foreach (ObjectPool i in poolCluster)
                 i.Render(renderer);
+            renderer.End();
         }
 
         public IObject[] ToArray()
